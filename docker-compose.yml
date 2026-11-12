@@ -1,0 +1,93 @@
+# 经营数据采集编排台 —— 一键启动
+# 用法: docker compose up -d --build   然后访问 http://localhost:5173 (admin / admin123)
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: collector
+      POSTGRES_PASSWORD: collector
+      POSTGRES_DB: collector
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d:ro   # 首次启动自动建表+种子
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U collector -d collector']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mock:
+    build: ./mock-platform
+    environment:
+      PORT: 4500
+    ports:
+      - '4500:4500'   # 模拟商家后台 + 场景控制端点
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:4500/healthz || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./api
+    environment:
+      PGHOST: postgres
+      PGPORT: '5432'
+      PGUSER: collector
+      PGPASSWORD: collector
+      PGDATABASE: collector
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      MOCK_BASE_URL: http://mock:4500
+      DATA_DIR: /data
+      OPS_USER: ${OPS_USER:-admin}
+      OPS_PASS: ${OPS_PASS:-admin123}
+      OPS_TOKEN: ${OPS_TOKEN:-dev-ops-token}
+      PORT: '8080'
+    volumes:
+      - collector_data:/data
+    ports:
+      - '8080:8080'
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      mock: { condition: service_healthy }
+
+  worker:
+    build: ./worker
+    environment:
+      PGHOST: postgres
+      PGPORT: '5432'
+      PGUSER: collector
+      PGPASSWORD: collector
+      PGDATABASE: collector
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      MOCK_BASE_URL: http://mock:4500
+      DATA_DIR: /data
+      HOSTNAME: worker
+    volumes:
+      - collector_data:/data
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      mock: { condition: service_healthy }
+
+  web:
+    build: ./web
+    ports:
+      - '5173:80'
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  collector_data:

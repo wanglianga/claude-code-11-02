@@ -1,0 +1,14 @@
+{
+  "name": "mock-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "可复现的模拟商家后台（ALPHA 网页导出 / BETA 下载中心 / GAMMA 开放API）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "xlsx": "^0.18.5"
+  }
+}
